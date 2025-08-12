@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Library.Mathematics.Models
+namespace RW.Library.Mathematics.Models
 {
     public class Fraction
     {
