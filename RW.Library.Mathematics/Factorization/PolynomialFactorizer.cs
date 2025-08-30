@@ -4,8 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace RW.Library.Mathematics.Polynomials.Factorization
+namespace RW.Library.Mathematics.Factorization
 {
+    using RW.Library.Mathematics.Polynomials;
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
@@ -23,7 +24,7 @@ namespace RW.Library.Mathematics.Polynomials.Factorization
             foreach (var t in poly.Terms)
             {
                 if (t.Variables.Count == 0 ||
-                    (t.Variables.Count == 1 && t.Variables.ContainsKey(variable)))
+                    t.Variables.Count == 1 && t.Variables.ContainsKey(variable))
                 {
                     int exp = t.Variables.TryGetValue(variable, out var e) ? e : 0;
                     byExp[exp] = byExp.TryGetValue(exp, out var sum) ? sum + t.Coefficient : t.Coefficient;

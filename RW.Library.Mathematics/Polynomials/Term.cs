@@ -4,9 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace RW.Library.Mathematics.Polynomials.Factorization
+namespace RW.Library.Mathematics.Polynomials
 {
-
     public class Term
     {
         public int Coefficient { get; set; }
