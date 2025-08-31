@@ -3,16 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-    using RW.Library.Mathematics.Polynomials;
-    using System;
-    using System.Collections.Generic;
-    using System.Diagnostics;
-    using System.Linq;
-    using System.Numerics;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Numerics;
 
-namespace RW.Library.Mathematics.Factorization
+namespace RW.Library.Mathematics.Polynomials
 {
-    public static class PolynomialFactorizer
+    public static class PolynomialFactorization
     {
         /// <summary>
         /// Factors a multivariate polynomial with respect to a single chosen variable using the Rational Root Theorem.
