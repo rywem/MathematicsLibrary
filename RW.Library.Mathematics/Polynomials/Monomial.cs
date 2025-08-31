@@ -1,16 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace RW.Library.Mathematics.Polynomials
+﻿namespace RW.Library.Mathematics.Polynomials
 {
     public static class Monomial
     {
-        public static string Signature(Term t) =>
-            string.Join(",", t.Variables
+        /// <summary>Deterministic signature for grouping like terms (same variables/ exponents).</summary>
+        public static string Signature(Term term) =>
+            string.Join(",", term.Variables
                 .OrderBy(kv => kv.Key, StringComparer.Ordinal)
                 .Select(kv => $"{kv.Key}^{kv.Value}"));
     }
+
 }
