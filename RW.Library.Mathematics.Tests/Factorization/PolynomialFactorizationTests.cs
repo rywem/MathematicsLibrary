@@ -6,7 +6,12 @@ using System.Threading.Tasks;
 
 namespace RW.Library.Mathematics.Tests.Factorization
 {
-    internal class PolynomialFactorizationTests
+    public class PolynomialFactorizationTests
     {
+        [Fact]
+        public void Test()
+        {
+
+        }
     }
 }

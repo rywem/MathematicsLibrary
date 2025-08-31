@@ -10,12 +10,30 @@ namespace RW.Library.Mathematics.Parsers
 {
     public static class PolynomialParser
     {
+
+        public static bool TryParse(string expression, out Polynomial? polynomial, out string? error)
+        {
+            try
+            {
+                polynomial = Parse(expression);
+                error = null;
+                return true;
+            }
+            catch (Exception ex) when (ex is FormatException || ex is ArgumentNullException)
+            {
+                polynomial = null;
+                error = ex.Message;
+                return false;
+            }
+        }
         /// <summary>
         /// Parse a polynomial expression (sum/difference of monomials) into a Polynomial.
         /// Examples: "x^2-3x+4", "2xy^2 - y + 2x + 4", "3*x*y^2 - 5"
         /// </summary>
         public static Polynomial Parse(string expression)
-            => new Polynomial(ParseTerms(expression).ToArray());
+        {
+            return new Polynomial(ParseTerms(expression).ToArray());
+        }
 
         /// <summary>
         /// Parse into raw Term list (before like-term combination).
@@ -146,4 +164,5 @@ namespace RW.Library.Mathematics.Parsers
 
         private static bool IsVarChar(char c) => char.IsLetter(c);
     }
+
 }

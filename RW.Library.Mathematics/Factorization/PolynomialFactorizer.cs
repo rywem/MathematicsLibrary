@@ -3,9 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-
-namespace RW.Library.Mathematics.Factorization
-{
     using RW.Library.Mathematics.Polynomials;
     using System;
     using System.Collections.Generic;
@@ -13,125 +10,208 @@ namespace RW.Library.Mathematics.Factorization
     using System.Linq;
     using System.Numerics;
 
+namespace RW.Library.Mathematics.Factorization
+{
     public static class PolynomialFactorizer
     {
-        public static List<Factor> Factorize(Polynomial poly, string variable)
+        /// <summary>
+        /// Factors a multivariate polynomial with respect to a single chosen variable using the Rational Root Theorem.
+        /// Returns linear factors of the form "(a x ± b)" and optional "(-1)" if the leading coefficient is negative.
+        /// </summary>
+        public static List<Factor> Factorize(Polynomial polynomial, string mainVariableName)
         {
-            var factors = new List<Factor>();
+            var factorList = new List<Factor>();
 
-            // Build exponent -> coefficient (univariate in 'variable' + constants)
-            var byExp = new Dictionary<int, BigInteger>();
-            foreach (var t in poly.Terms)
+            // 1) Collapse the polynomial to a univariate map: exponent -> coefficient (only terms in mainVariableName or constants).
+            // (A univariate polynomial is simply a polynomial that has only one variable.)
+            var exponentToCoefficient = new Dictionary<int, BigInteger>();
+            foreach (var term in polynomial.Terms)
             {
-                if (t.Variables.Count == 0 ||
-                    t.Variables.Count == 1 && t.Variables.ContainsKey(variable))
-                {
-                    int exp = t.Variables.TryGetValue(variable, out var e) ? e : 0;
-                    byExp[exp] = byExp.TryGetValue(exp, out var sum) ? sum + t.Coefficient : t.Coefficient;
-                }
-            }
-            if (byExp.Count == 0) return factors;
+                // Keep constants or terms that only involve the selected variable.
+                var isConstant = term.Variables.Count == 0;
+                var isUnivariateInSelected = term.Variables.Count == 1 && term.Variables.ContainsKey(mainVariableName);
+                if (!isConstant && !isUnivariateInSelected)
+                    continue;
 
-            // prune cancellations
-            foreach (var k in byExp.Keys.ToList())
-                if (byExp[k] == 0) byExp.Remove(k);
-            if (byExp.Count == 0) return factors;
+                // Determine exponent on the selected variable (0 for constants).
+                int exponentOnSelected = term.Variables.TryGetValue(mainVariableName, out int exponentFound) ? exponentFound : 0;
 
-            int degree = byExp.Keys.Max();
-            if (!byExp.TryGetValue(degree, out var leading) || leading == 0) return factors;
-
-            // Optional: pull out a -1 so leading is positive (nicer factors)
-            if (leading < 0)
-            {
-                factors.Add(new Factor("(-1)"));
-                var keys = byExp.Keys.ToList();
-                foreach (var k in keys) byExp[k] = -byExp[k];
-                leading = -leading;
+                // Sum coefficients per exponent.
+                exponentToCoefficient[exponentOnSelected] =
+                    exponentToCoefficient.TryGetValue(exponentOnSelected, out BigInteger coefficientSum)
+                        ? coefficientSum + term.Coefficient
+                        : term.Coefficient;
             }
 
-            var constant = byExp.TryGetValue(0, out var c0) ? c0 : BigInteger.Zero;
+            if (exponentToCoefficient.Count == 0)
+                return factorList;
 
-            // Special case root at 0
-            if (constant == 0)
-                factors.Add(new Factor($"({variable})"));
-
-            // Candidates r = p/q with p | constant, q | leading (±, reduced)
-            var ps = DivisorsWithSign(BigInteger.Abs(constant)).ToArray();
-            var qs = DivisorsWithSign(BigInteger.Abs(leading)).ToArray();
-            var seen = new HashSet<(BigInteger p, BigInteger q)>();
-
-            foreach (var p in ps)
+            // 2) Remove any exponents whose net coefficient canceled to zero.
+            foreach (var exponent in exponentToCoefficient.Keys.ToList())
             {
-                foreach (var q in qs)
-                {
-                    if (q.IsZero) continue;
-                    var (rp, rq) = Reduce(p, q);
-                    if (rq.Sign < 0) { rp = -rp; rq = -rq; } // keep q > 0
-                    if (!seen.Add((rp, rq))) continue;
+                if (exponentToCoefficient[exponent] == 0)
+                    exponentToCoefficient.Remove(exponent);
+            }
 
-                    if (EvaluateAt(byExp, rp, rq) == 0)
+            if (exponentToCoefficient.Count == 0)
+                return factorList;
+
+            // 3) Identify degree and leading coefficient.
+            int polynomialDegree = exponentToCoefficient.Keys.Max();
+            if (!exponentToCoefficient.TryGetValue(polynomialDegree, out BigInteger leadingCoefficient) || leadingCoefficient == 0)
+                return factorList;
+
+            // 4) Normalize sign so the leading coefficient is positive (emits a factor of -1 if needed).
+            if (leadingCoefficient < 0)
+            {
+                factorList.Add(new Factor("(-1)"));
+                foreach (var exponent in exponentToCoefficient.Keys.ToList())
+                    exponentToCoefficient[exponent] = -exponentToCoefficient[exponent];
+
+                leadingCoefficient = -leadingCoefficient;
+            }
+
+            // Constant term (coefficient for exponent 0). Used to build rational root candidates.
+            BigInteger constantTerm = exponentToCoefficient.TryGetValue(0, out BigInteger constantCoeff)
+                ? constantCoeff
+                : BigInteger.Zero;
+
+            // 5) Special-case root at zero: if constant term is zero, (x) is a factor.
+            if (constantTerm == 0)
+                factorList.Add(new Factor($"({mainVariableName})"));
+
+            // 6) Generate rational root candidates r = p/q where p | constant, q | leading (both ±, reduced to lowest terms).
+            var candidateNumerators = GetDivisorsWithSigns(BigInteger.Abs(constantTerm)).ToArray();
+            var candidateDenominators = GetDivisorsWithSigns(BigInteger.Abs(leadingCoefficient)).ToArray();
+
+            var testedReducedPairs = new HashSet<(BigInteger Numerator, BigInteger Denominator)>();
+
+            foreach (var numeratorCandidate in candidateNumerators)
+            {
+                foreach (var denominatorCandidate in candidateDenominators)
+                {
+                    if (denominatorCandidate.IsZero)
+                        continue;
+
+                    // Reduce fraction and keep denominator positive for canonical form.
+                    var (reducedNumerator, reducedDenominator) = ReduceToLowestTerms(numeratorCandidate, denominatorCandidate);
+                    if (reducedDenominator.Sign < 0)
                     {
-                        // Emit (q x - p) with integer coeffs
-                        var sign = rp.Sign < 0 ? "+" : "-";
-                        factors.Add(new Factor($"({rq}{variable} {sign} {BigInteger.Abs(rp)})"));
+                        reducedNumerator = -reducedNumerator;
+                        reducedDenominator = -reducedDenominator;
+                    }
+
+                    // Skip duplicates.
+                    if (!testedReducedPairs.Add((reducedNumerator, reducedDenominator)))
+                        continue;
+
+                    // 7) Evaluate P(reducedNumerator / reducedDenominator) exactly (scaled to avoid fractions).
+                    if (EvaluateAtRationalRoot(exponentToCoefficient, reducedNumerator, reducedDenominator) == 0)
+                    {
+                        // Root r = p/q implies factor (q * x - p). Choose sign formatting for readability.
+                        string signText = reducedNumerator.Sign < 0 ? "+" : "-";
+                        factorList.Add(new Factor($"({reducedDenominator}{mainVariableName} {signText} {BigInteger.Abs(reducedNumerator)})"));
                     }
                 }
             }
 
-            return factors;
+            return factorList;
         }
 
-        // Evaluate P(p/q) exactly by scaling by q^deg: sum a_k * p^k * q^(deg-k)
-        private static BigInteger EvaluateAt(Dictionary<int, BigInteger> byExp, BigInteger p, BigInteger q)
+        /// <summary>
+        /// Evaluates q^deg * P(p/q) as an integer to avoid fractional arithmetic.
+        /// Returns 0 if and only if p/q is an exact root of P.
+        /// </summary>
+        private static BigInteger EvaluateAtRationalRoot(
+            Dictionary<int, BigInteger> exponentToCoefficient,
+            BigInteger rootNumerator,
+            BigInteger rootDenominator)
         {
-            int deg = byExp.Keys.Max();
-            BigInteger sum = 0;
-            foreach (var kv in byExp)
+            int degree = exponentToCoefficient.Keys.Max();
+            BigInteger scaledSum = BigInteger.Zero;
+
+            foreach (var exponentAndCoefficient in exponentToCoefficient)
             {
-                int k = kv.Key;
-                var ak = kv.Value;
-                sum += ak * IPow(p, k) * IPow(q, deg - k);
+                int exponent = exponentAndCoefficient.Key;
+                BigInteger coefficient = exponentAndCoefficient.Value;
+
+                // a_k * p^k * q^(deg - k)
+                scaledSum += coefficient
+                           * IntegerPower(rootNumerator, exponent)
+                           * IntegerPower(rootDenominator, degree - exponent);
             }
-            return sum; // == 0 iff r = p/q is a root
+
+            return scaledSum;
         }
 
-        private static IEnumerable<BigInteger> DivisorsWithSign(BigInteger n)
+        /// <summary>
+        /// Returns all positive and negative divisors of |n|.
+        /// For n = 0, yields a single 0 (typically not used by callers).
+        /// </summary>
+        private static IEnumerable<BigInteger> GetDivisorsWithSigns(BigInteger value)
         {
-            if (n.IsZero)
+            if (value.IsZero)
             {
-                yield return 0; // handled elsewhere; typically not used
+                yield return BigInteger.Zero;
                 yield break;
             }
-            n = BigInteger.Abs(n);
-            for (BigInteger i = 1; i * i <= n; i++)
+
+            BigInteger absolute = BigInteger.Abs(value);
+            for (BigInteger divisorCandidate = 1; divisorCandidate * divisorCandidate <= absolute; divisorCandidate++)
             {
-                if (n % i == 0)
+                if (absolute % divisorCandidate == 0)
                 {
-                    yield return i; yield return -i;
-                    var j = n / i;
-                    if (j != i) { yield return j; yield return -j; }
+                    // divisorCandidate and its complementaryDivisor are both divisors.
+                    yield return divisorCandidate;
+                    yield return -divisorCandidate;
+
+                    BigInteger complementaryDivisor = absolute / divisorCandidate;
+                    if (complementaryDivisor != divisorCandidate)
+                    {
+                        yield return complementaryDivisor;
+                        yield return -complementaryDivisor;
+                    }
                 }
             }
         }
 
-        private static (BigInteger p, BigInteger q) Reduce(BigInteger p, BigInteger q)
+        /// <summary>
+        /// Reduces a rational pair (numerator, denominator) to lowest terms.
+        /// Ensures (0, anything) -> (0, 1).
+        /// </summary>
+        private static (BigInteger Numerator, BigInteger Denominator) ReduceToLowestTerms(BigInteger numerator, BigInteger denominator)
         {
-            if (p.IsZero) return (0, 1);
-            var g = BigInteger.GreatestCommonDivisor(BigInteger.Abs(p), BigInteger.Abs(q));
-            return (p / g, q / g);
+            if (numerator.IsZero)
+                return (BigInteger.Zero, BigInteger.One);
+
+            BigInteger gcd = BigInteger.GreatestCommonDivisor(BigInteger.Abs(numerator), BigInteger.Abs(denominator));
+            return (numerator / gcd, denominator / gcd);
         }
 
-        private static BigInteger IPow(BigInteger b, int e)
+        /// <summary>
+        /// Fast integer exponentiation: computes baseValue^exponent (exponent must be non-negative).
+        /// </summary>
+        private static BigInteger IntegerPower(BigInteger baseValue, int exponent)
         {
-            if (e < 0) throw new ArgumentOutOfRangeException(nameof(e));
-            BigInteger r = 1;
-            while (e > 0)
+            if (exponent < 0)
+                throw new ArgumentOutOfRangeException(nameof(exponent), "Exponent must be non-negative.");
+
+            BigInteger result = BigInteger.One;
+            BigInteger currentPower = baseValue;
+            int remainingExponent = exponent;
+
+            // Exponentiation by squaring.
+            while (remainingExponent > 0)
             {
-                if ((e & 1) != 0) r *= b;
-                b *= b;
-                e >>= 1;
+                bool isOddBit = (remainingExponent & 1) != 0;
+                if (isOddBit)
+                    result *= currentPower;
+
+                currentPower *= currentPower;
+                remainingExponent >>= 1;
             }
-            return r;
+
+            return result;
         }
     }
 

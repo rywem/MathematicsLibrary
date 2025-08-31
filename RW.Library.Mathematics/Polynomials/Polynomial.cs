@@ -16,12 +16,15 @@ namespace RW.Library.Mathematics.Polynomials
 
             // Combine like terms (same variable dictionary)
             Terms = Terms
-                .GroupBy(t => string.Join(",", t.Variables.OrderBy(v => v.Key)
-                                                         .Select(v => $"{v.Key}^{v.Value}")))
-                .Select(g => new Term(g.Sum(t => t.Coefficient), g.First().Variables))
+                .GroupBy(Monomial.Signature)   // ⬅️ here
+                .Select(g => new Term(
+                    g.Sum(t => t.Coefficient),
+                    new Dictionary<string, int>(g.First().Variables, StringComparer.Ordinal)
+                ))
                 .Where(t => t.Coefficient != 0)
                 .ToList();
         }
+       
 
         public override string ToString()
         {
