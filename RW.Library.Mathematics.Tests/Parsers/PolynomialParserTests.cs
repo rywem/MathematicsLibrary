@@ -1,4 +1,4 @@
-﻿using RW.Library.Mathematics.Parsers;
+﻿
 using RW.Library.Mathematics.Polynomials;
 using System;
 using System.Collections.Generic;
